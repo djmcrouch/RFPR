@@ -1,0 +1,62 @@
+#In R:#####################################################################
+Dvec=c(1,2,3,4,5,6)
+nSim=100000000
+seed=110585
+threshVec=c(1e-4,1e-3,1e-2,0.05)
+setwd("directory") #Set working directory
+library(ecoflux)
+powerStore=array(dim=c(length(Dvec),length(threshVec),3));FPstore=powerStore
+set.seed(seed)
+for(t in 1:length(threshVec)){
+thresh=threshVec[t]
+print(paste0("threshold=",thresh))
+for(i in 1:length(Dvec)){
+	D=Dvec[i]
+	print(paste0("effect=",D))
+	z=rnorm(nSim,mean=D,sd=1)
+	z_null=rnorm(nSim,mean=0,sd=1)
+	P=pnorm(z,lower.tail=FALSE)
+	P_null=pnorm(z_null,lower.tail=FALSE)
+	bool=(P<=thresh)
+	probPass=(sum(bool)+1)/(length(bool)+1)
+	postHoc<-function(x){
+		alphaPost=round(-log10(x),digits=0)
+		alphaPost[alphaPost>(-log10(x))]=alphaPost[alphaPost>(-log10(x))]-1
+		alphaPost=10^(-alphaPost)
+		alphaPost[(x<=0.025)&(x>0.01)]=0.025
+		alphaPost[(x<=0.05)&(x>0.025)]=0.05
+		alphaPost[(x>0.05)]=1
+		return(alphaPost)
+				}
+	power_trad=probPass*log10(thresh)/(log10(thresh)-1)
+	power_rfpr=probPass*log10(mean(2*P[bool]))/(log10(mean(2*P[bool]))-1)
+	power_postHoc=probPass*log10(mean(postHoc(P)[bool]))/(log10(mean(postHoc(P)[bool]))-1)
+	powerStore[i,t,]=c(power_trad,power_rfpr,power_postHoc)
+	bool=(P_null<=thresh)
+	FP_rfpr=mean(2*P_null[bool])
+	FP_postHoc=mean(postHoc(P_null)[bool])
+	FPstore[i,t,]=c(thresh,FP_rfpr,FP_postHoc)
+		}}
+png("Figure1.png",width=6000,height=2000,res=550)
+par(mfrow=c(1,3),mar=c(4.5,4.3,1.3,1.1))
+for(i in 1:3){
+	for(t in 1:length(threshVec)){
+	if(t==1)plot(x=Dvec,y=powerStore[,t,i],xlab="Effect size (expected Z-score)",ylab="Modified power to obtain low error estimates",type='l',col=(1:length(threshVec))[t],ylim=c(0,max(powerStore)))
+	if(t>1)points(x=Dvec,y=powerStore[,t,i],xlab="Effect size (expected Z-score)",ylab="Modified power to obtain low error estimates",type='l',col=(1:length(threshVec))[t],ylim=c(0,max(powerStore)))
+	if(i==1)legend(x=Dvec[1],y=max(powerStore),col=1:length(threshVec),legend=scientific_10x(threshVec),title=expression(alpha),lty=1)
+	mtext(c("a)","b)","c)")[i],side=3,padj=0.5,adj=-0.175,font=2,cex=1.2)
+	}}
+dev.off()
+options(scipen=-1)
+changeSciNot <- function(n) {
+  output <- format(n, scientific = TRUE) #Transforms the number into scientific notation even if small
+  output <- sub("e", "\\\\times10^{", output) #Replace e with 10^. Need four slashes to get '\'.
+  output <- sub("\\+0?", "", output) #Remove + symbol and leading zeros on expoent, if > 1
+  output <- sub("-0?", "-", output) #Leaves - symbol but removes leading zeros on expoent, if < 1
+  output=paste0("$",output,"}$")
+  output
+}
+FPout=apply(X=FPstore[1,,],FUN=changeSciNot,MARGIN=2)
+write.table(data.frame(FPout[,1],FPout),file="Table1.csv",col.names=c("True alpha","Fixed alpha","RFPR","a posteriori selection"),row.names=FALSE,quote=FALSE,sep=",")
+options(scipen=0)
+#End of code###############################################################

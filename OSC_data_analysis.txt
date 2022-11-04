@@ -1,0 +1,68 @@
+#In R:#####################################################################
+seed=110585
+threshVec=c(1e-4,1e-3,1e-2,0.05)
+threshLim=0.055
+setwd("directory") #Set working directory
+set.seed(seed)
+data=read.csv("rpp_data.csv",header=T,comment.char="")
+data=data[!is.na(data$T_pval_USE..R.),]
+rep=data[,'T_pval_USE..R.']
+orig=data[,'T_pval_USE..O.'] 
+sigLevel=gsub("<\\.","0.",data$Reported.P.value..O.)
+sigLevel[grep("significant",sigLevel)]="0.05"
+sigLevel[grep("X",data$Reported.P.value..O.)]=NA
+sigLevel[data$Reported.P.value..O.==0]=orig[data$Reported.P.value..O.==0]
+sigLevel[grep("prep",data$Reported.P.value..O.)]=NA
+sigLevel[grep(">",data$Reported.P.value..O.)]=NA
+sigLevel=as.numeric(gsub("<","",sigLevel))
+rep[data$Study.Num==46]=2.2e-16 #The analysts in the paper had set this value to zero
+repStore=rep
+orig[data$Study.Num==46]=0.001 #The same study has this same issue with the original P-value. Use the 'T_pval..O.' value.
+png("Pcumulative.png")
+plot(rep,rank(rep)/length(rep))
+points(orig,rank(orig)/length(orig),col=2)
+dev.off()
+#This plot matches Figure S2 in the SI of the paper above
+#First test if lower P-values are more likely to be true positives
+FDR=p.adjust(rep,method="BH")
+orig=orig[order(FDR)]
+rep=rep[order(FDR)]
+FDR=FDR[order(FDR)]
+png("Figure2.png",width=3000,height=3000,res=500)
+par(mar=c(4.5,4.3,1.3,0.7))
+red=rgb(1,0,0,alpha=1)
+blue=rgb(0,0,1,alpha=1)
+redLight=rgb(1,0,0,alpha=0.33)
+blueLight=rgb(0,0,1,alpha=0.33)
+plot(x=rep,y=FDR,xlab="P-value",ylab="Benjamini-Hochberg (BH) FDR",pch=1)
+abline(0,2,lty="dotted")
+abline(0,20,lty="dotted",col=red)
+abline(0,40,lty="dotted",col=blue)
+x=seq(0,1,by=0.0001)
+y=x/0.975;y[x>0.025]=x[x>0.025]/0.95
+points(x=x,y=y,lty="dotted",col=blue,type="l")
+segments(x0=median(rep),y0=-0.1,x1=median(rep),y1=2*median(rep),col=redLight)
+segments(x0=-0.1,y0=2*median(rep),x1=median(rep),y1=2*median(rep),col=redLight) 
+segments(x0=median(rep)*2,y0=-0.1,x1=median(rep)*2,y1=2*median(rep),col=blueLight) 
+segments(x0=1.1,y0=2*median(rep),x1=median(rep)*2,y1=2*median(rep),col=blueLight) 
+text("Impossible zone",x=0.7,y=0.2,col=blue)
+text("Median\nP-value",x=0.265,y=0.0075,col=red)
+text(x=0.4,y=2*0.4,"RFPR estimate",srt=63.4,pos=3,cex=0.75) #63.4 = arc tan of 2
+text(x=0.025,y=20*0.025,"95% one-sided upper CI",srt=87.1,pos=4,cex=0.75,col=red) #Use a web arctan function to get the degrees
+text(x=0.02,y=40*0.02,"95% upper CI",srt=88.6,pos=2,offset=0.4,cex=0.75,col=blue)
+text(x=0.6,y=1/0.95*0.6,"95% lower CI",srt=46.47,pos=4,cex=0.75,offset=0.9,col=blue)  
+dev.off()
+#How many lie within intervals?
+sum(FDR<=(20*rep))
+#[1] 95
+bool1=(FDR<=(40*rep))&((FDR>=rep/0.975))
+bool2=(FDR<=(40*rep))&((FDR>=rep/0.95))
+sum(bool1[rep<=0.025])+sum(bool2[rep>0.025])
+#[1] 92
+#How many would be accpted using the upper one sided 95% bound to be confident about an FDR of 10%?
+sum(20*rep<=0.1)
+#[1] 24
+#In contrast, how many actual BH FDRs are less than 0.1?
+sum(FDR<0.1)
+#[1] 32
+#End of code###############################################################
